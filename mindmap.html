@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>开放 Agent 架构调研 · 交互思维导图</title>
+<style>
+  :root { --bg:#0f1115; --fg:#e8eaf0; --muted:#9aa3b2; --accent:#7cc4ff; --card:#171b22; --border:#262c36; }
+  * { box-sizing:border-box; }
+  body { background:var(--bg); color:var(--fg); font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; margin:0; padding:24px; line-height:1.6; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
+  .toolbar { margin-bottom:16px; display:flex; gap:8px; }
+  button { background:var(--card); color:var(--fg); border:1px solid var(--border); border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--accent); }
+  ul.tree, ul.tree ul { list-style:none; margin:0; padding-left:22px; }
+  ul.tree { padding-left:0; }
+  li.node { margin:2px 0; }
+  .label { cursor:pointer; display:inline-block; padding:3px 10px; border-radius:8px; }
+  .label:hover { background:var(--card); }
+  .label .caret { display:inline-block; width:16px; color:var(--accent); font-size:12px; }
+  .label .text { font-size:14px; }
+  li.leaf > .label { cursor:default; }
+  li.leaf > .label:hover { background:none; }
+  li.leaf > .label .text { color:var(--muted); font-size:13px; }
+  li.root > .label .text { font-size:17px; font-weight:700; }
+  li.l1 > .label .text { font-size:15px; font-weight:600; color:var(--accent); }
+  ul.collapsed { display:none; }
+  .src { margin-top:24px; font-size:12px; color:var(--muted); }
+  .src a { color:var(--accent); }
+</style>
+</head>
+<body>
+<h1>开放 Agent 架构：Cordis · dsh · 调度 · 交互思维导图</h1>
+<div class="sub">调研 · 2026-10-04 · 点击节点展开 / 折叠</div>
+<div class="toolbar">
+  <button id="expandAll">全部展开</button>
+  <button id="collapseAll">全部折叠</button>
+</div>
+<ul class="tree" id="tree"></ul>
+<div class="src">完整报告见 <a href="https://github.com/ringozzt/open-agent-arch-research">ringozzt/open-agent-arch-research · README.md</a> ｜ Cordis 详解 <a href="https://github.com/ringozzt/cordis-research">ringozzt/cordis-research</a></div>
+<script>
+const data = ["开放 Agent 架构调研", [
+  ["Cordis：插件化的形式化理论", [
+    "cordiverse/cordis · TypeScript · MIT · 作者 shigma（Koishi.js）",
+    "论文 arXiv:2608.25512《时空可组合性的编程范式》（92 页，北大 + DeepSeek-AI）",
+    "注意：论文全文未提及 DSH，'旗舰应用'只是社区推断",
+    ["时间可组合性", ["revertible effects：组件移除时副作用被完全撤销", "runtime 代持逆操作"]],
+    ["空间可组合性", ["reactive coeffects：声明依赖，context 变化时响应式装配"]],
+    "统一：Context Paradigm，交错执行互不干扰",
+    ["工程五机制", [
+      "插件 = 实现 Service 接口的对象",
+      "context = service 仓库，按 key 解析、绝不直接 import",
+      "依赖经 inject 声明，加载顺序从可用性中涌现",
+      "类型化事件四种 dispatch：emit / waterfall / parallel / serial",
+      "所有注册皆可逆，卸载/HMR 确定性回滚"
+    ]],
+    "dsh vendored（内置拷贝）Cordis 而非 npm 依赖"
+  ]],
+  ["dsh：Everything is a Plugin", [
+    "deepseek-ai/deepseek-harness · MIT · 2026-08-13 创建",
+    "~243k star / 29k fork / 20.7k commits（2026-10-04 实测，两个月）",
+    "口号：Agent = Model + Harness；中文'一切皆插件，运行有迹可循'",
+    ["组合模型", [
+      "profile 堆叠 bundle，bundle = cordis.patch.yml 行 + 代码",
+      "patch 按 id 整行替换（无深合并）",
+      "dsh-base 是每层打底；新 profile 经 dsh plugin 创建",
+      "in-repo 无官方 marketplace，生态约定 dsh-plugin topic"
+    ]],
+    ["运行时：turn / step / round", [
+      "turn=输入排空，step=模型请求+工具执行，round=外层策略迭代",
+      "脊柱服务：ctx.sessions / systemPrompt / tools / agents / agentLoop / llm",
+      "agentLoop 本身也是 bundle 的一行——扩展只依赖 agent",
+      "Agent 句柄：inbox / cancel / steer / inject / scoped ctx"
+    ]],
+    ["Session log：不变量驱动", [
+      "append-only 事件流 SessionEventMap",
+      "运行时不变量：model-visible 的一切必须能从 log 重建",
+      "历史/UI/telemetry/fork/resume/搜索全部从 log 派生",
+      "每次模型请求 flush checkpoint；JSONL + zstd + checksum"
+    ]],
+    ["Capability seam：扩展的强制单位", [
+      "定义 + 提供者 + 消费者三件套，缺一不可",
+      "范例：dsh-shell / dsh-bash-local·sandbox / dsh-tool-bash",
+      "同世界 provider 成组迁移（fs+subprocess → E2B 一起走）"
+    ]],
+    ["Creator Mode", [
+      "cordis preset：运行时自省 + 内存写插件 + 热挂载 + 持久化",
+      "tool-cordis 在 vm sandbox 里跑模型手写的包（信任边界非沙箱）"
+    ]],
+    ["调度的醒目缺席", [
+      "schedule 包存在但 opt-in，无官方 bundle 挂载",
+      "absence is data：连 DeepSeek 都没想好调度怎么做"
+    ]]
+  ]],
+  ["Agent 调度的三层模型", [
+    ["L1 步进调度：这一步怎么走", [
+      "dsh：agent loop 本身是插件，可换——最深",
+      "Claude Code：内置 loop + Mods 开洞"
+    ]],
+    ["L2 任务编排：任务怎么拆", [
+      "dsh：ctx.agents 句柄（inbox/steer/inject）",
+      "LangGraph（graph runtime）、Ralph 系（loop-until-done）"
+    ]],
+    ["L3 持久调度：挂了怎么恢复", [
+      "Temporal（durable workflow 事实标准）、Hatchet（Postgres+MIT）、Trigger.dev",
+      "dsh：故意留白，把 L3 让给生态"
+    ]],
+    "洞察：三层正交，一个 harness 不必全做"
+  ]],
+  ["开源方案横评", [
+    "Temporal：signals 可暂停 60 天；AgentWorkflow 模式（tool = Activity）",
+    "Hatchet：7.9k star，DAG first-class，'for AI agents'",
+    "Inngest：SSPL，许可不如前两者开放",
+    "Restate / DBOS：轻量 durable execution（OpenAI Agents SDK 官方集成）",
+    "LangGraph：MIT，interrupt() 无限暂停；短板是同进程",
+    "Microsoft Agent Framework：AutoGen 后继，checkpoint + time-travel",
+    "AgenticTime：agent 调度专用二进制时间格式（Rust），新物种"
+  ]],
+  ["设计模式对照", [
+    "微内核 + 可逆 effects：Cordis/dsh —— 一切皆可换；代价是复杂度税",
+    "可加载模块：Claude Mods —— 单体内核 + hooks，宿主说了算",
+    "历史押韵：Mach vs Linux，30 年前打过一次，赢的是 Linux",
+    "Durable execution：Temporal —— 时间可回放；L1 不碰",
+    "Library/adapter：oar —— 跨 harness 可移植；最大公约数",
+    "中立性：oar 不卖模型；dsh 再开源也是 DeepSeek 主导"
+  ]],
+  ["给 k2 的参考", [
+    "调度分层别一锅烩：L1 借 Cordis 思想，L3 直接用 Temporal/Hatchet",
+    "revertible effects：插件 teardown 不应靠自觉，runtime 持有逆操作",
+    "学 seam 三件套：k2-bridge 换 provider 不动 consumer",
+    "抄 session log 不变量：model-visible means logged，可观测地基",
+    "dsh schedule 的缺席是信号：L3 先对接外部引擎，别自己造"
+  ]]
+]];
+function build(node, depth) {
+  const li = document.createElement("li");
+  const isLeaf = typeof node === "string";
+  li.className = "node " + (isLeaf ? "leaf" : (depth === 0 ? "root" : depth === 1 ? "l1" : ""));
+  const label = document.createElement("span");
+  label.className = "label";
+  const text = isLeaf ? node : node[0];
+  label.innerHTML = '<span class="caret">' + (isLeaf ? "" : "▸") + '</span><span class="text"></span>';
+  label.querySelector(".text").textContent = text;
+  li.appendChild(label);
+  if (!isLeaf) {
+    const ul = document.createElement("ul");
+    if (depth >= 1) ul.classList.add("collapsed");
+    node[1].forEach(child => ul.appendChild(build(child, depth + 1)));
+    li.appendChild(ul);
+    label.addEventListener("click", () => {
+      ul.classList.toggle("collapsed");
+      label.querySelector(".caret").textContent = ul.classList.contains("collapsed") ? "▸" : "▾";
+    });
+  }
+  return li;
+}
+const tree = document.getElementById("tree");
+tree.appendChild(build(data, 0));
+document.getElementById("expandAll").addEventListener("click", () => {
+  tree.querySelectorAll("ul.collapsed").forEach(u => u.classList.remove("collapsed"));
+  tree.querySelectorAll(".caret").forEach(c => c.textContent = "▾");
+});
+document.getElementById("collapseAll").addEventListener("click", () => {
+  tree.querySelectorAll("ul.tree ul").forEach(u => u.classList.add("collapsed"));
+  tree.querySelectorAll("li:not(.root) > .label .caret").forEach(c => c.textContent = "▸");
+});
+</script>
+</body>
+</html>
