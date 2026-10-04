@@ -2,7 +2,7 @@
 
 > Agent 系统的竞争已经从"卖 Token"打到运行时层（Model + Harness = Agent）。本报告沿三条线深挖开放架构：**Cordis**（微内核元框架）、**dsh**（DeepSeek Harness，Everything is a Plugin）、以及 **Agent 调度的三层模型**与开源方案横评。
 
-- 调研日期：2026-10-04
+- 调研日期：2026-10-04（当日 15:40 追加 v0.2.1-alpha.1 更新）
 - 方法：公开仓库、arXiv 论文、官方文档 + 第三方实测报告（特别感谢 [s2p2/dsh-lab](https://github.com/s2p2/dsh-lab) 的 dsh-baseline，其方法是对照 bundle patch YAML 逐条验证产品页 claim）
 
 ---
@@ -62,10 +62,16 @@
 - Creator = `cordis` preset：运行时自省（看自己挂了哪些插件）、内存里写插件实验、热挂载、持久化成新 preset——"现场改写自身器官"。
 - Web UI 本体也是插件（client bundle），host/browser 双半插件模型。
 
-### 2.6 调度在 dsh 里：醒目的缺席
+### 2.6 调度在 dsh 里：从缺席到横跳
 
-- 产品页宣称插件涵盖 "models, tools, skills, sessions, sandboxes, storage, loops, **scheduling**, and the UI"——dsh-lab 验证：**schedule 包存在，但是 opt-in，没有任何官方 bundle 挂载它**。
-- session event 里有 `schedule/change` 类型，subagent scheduling 进 log，但 cron 式调度、定时任务在官方 bundle 里是**故意留白**。"absence is data"：连 DeepSeek 都没想好调度怎么做。
+- 产品页宣称插件涵盖 "models, tools, skills, sessions, sandboxes, storage, loops, **scheduling**, and the UI"——dsh-lab（2026-08-30）验证：**schedule 包存在，但是 opt-in，没有任何官方 bundle 挂载它**。"absence is data"。
+- **2026-10-03 更新**：v0.2.0-rc.1 把自动化任务"改由可选插件包提供"；v0.2.1-alpha.1 又"改为 Web 内置能力"——提醒工具按模式提供（Standard/Creator/PTC 可用，Minimal/子代理不可用），旧任务保留。L3 在"插件 vs 内置"之间横跳，说明团队自己也在找调度该住哪一层。
+- session event 里有 `schedule/change` 类型，subagent scheduling 进 log。
+
+### 2.7 v0.2.1-alpha.1：Mods 兼容层与破坏性变更（2026-10-03）
+
+- **实验性 Claude Code Mods 兼容层**（[@tianyicui](https://github.com/deepseek-ai/deepseek-harness/releases) 亲自挂名）：目标**不是**完整兼容，而是**验证 Claude Code Mods API 的功能大致为 dsh 插件能力的一个子集**——与其说是兼容层，不如说是收编声明：你的 API 表达能力 ⊆ 我的插件系统。
+- **破坏性变更**：移除运行时 invariant 插件及各包 `./invariant` 导出（本报告 §2.3 的"运行时不变量"正是它，依赖诊断入口的扩展和自定义 profile 需迁移）；输入区 `stats` 扩展点拆为 `activity` + `usage`。dev preview 的 breaking 警告是玩真的——dsh 的插件契约目前是流沙。
 
 ## 3. Agent 调度的三层模型
 
@@ -102,7 +108,7 @@
 | Graph runtime | LangGraph | 声明式编排 | 同进程、单语言 |
 | Middleware chain（洋葱） | Claude Mods | 单体内核 + 可加载模块 | 宿主说了算，能开什么洞由 Anthropic 定 |
 | Library / adapter | oar | 跨 harness 可移植 | 最大公约数，深能力表达不出 |
-| Cron-as-plugin（占位） | dsh schedule | 调度只是插件之一 | ——连 DeepSeek 都还没填 |
+| Cron-as-plugin → 内置横跳 | dsh schedule/automation | 调度在插件与内置间横跳 | v0.2.1-alpha.1 收归 Web 内置 |
 
 历史押韵：dsh 是微内核原教旨（Mach），Claude Mods 是单体内核加可加载模块（Linux LKM）——in-process、有特权、可热加载。30 年前 Tanenbaum–Torvalds 打过一次，赢的是 Linux。微内核在 adoption 上从来打不过"务实的单体 + hooks"。
 
@@ -112,7 +118,7 @@
 2. **revertible effects**：插件卸载的资源清理不应靠自觉，而应由 runtime 持有逆操作——指导 k2 插件生命周期的 teardown 设计。
 3. **capability seam 三件套**：k2-bridge 的协议适配（Codex/Claude/ACP）可以学 Definition/Provider/Consumer 分离——换 provider 不动 consumer。
 4. **session log 不变量**（model-visible means logged）：可观测、回放、审计的地基，k2 的 daemon 层值得抄。
-5. **dsh schedule 的缺席是信号**：L3 调度连 DeepSeek 都留白，说明"调度"和"harness"是两门手艺；k2 不必在 daemon 里做重调度，薄薄一层对接外部引擎即可。
+5. **dsh schedule 从缺席到横跳**（可选插件包 → v0.2.1-alpha.1 收归 Web 内置）：L3 连 DeepSeek 都在找位置，说明"调度"和"harness"是两门手艺；k2 不必在 daemon 里做重调度，薄薄一层对接外部引擎即可，静观其变。
 
 ## 7. 思维导图
 
@@ -157,10 +163,14 @@ mindmap
       CreatorMode
         运行时自省
         内存写插件热挂载
-      调度的缺席
-        schedule插件opt-in
-        无官方bundle挂载
-        absence is data
+      调度从缺席到横跳
+        v0.2.0-rc.1改为可选插件包
+        v0.2.1-alpha.1收归Web内置
+        L3位置未定
+      v0.2.1-alpha.1
+        Mods兼容层验证子集关系
+        移除invariant插件
+        stats拆为activity+usage
     调度三层
       L1步进调度
         dsh loop插件化最深
